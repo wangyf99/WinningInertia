@@ -1,0 +1,155 @@
+---
+title: "CDC Project"
+output: html_notebook
+---
+
+```{r}
+setwd("~/Downloads")
+cfb2009 = read.csv("cfb2009lines.csv")
+cfb2010 = read.csv("cfb2010lines.csv")
+cfb2011 = read.csv("cfb2011lines.csv")
+cfb2012 = read.csv("cfb2012lines.csv")
+cfb2013 = read.csv("cfb2013lines.csv")
+```
+
+```{r}
+library(mosaic)
+library(corrplot)
+library(e1071)
+```
+
+Sample n teams randomly (n = 5)
+```{r}
+set.seed(53)
+n = 5
+teams = sample(cfb2009$Home.Team, n)
+teams
+```
+
+```{r}
+rawdata = list(cfb2009,cfb2010,cfb2011,cfb2012,cfb2013)
+data = list(1,2,3,4,5)
+names(data) = teams
+for (i in 1:length(teams)) {
+  for (j in 1:length(rawdata)){
+    temp = rbind(subset(rawdata[[j]], Visitor == as.character(teams[i])), subset(rawdata[[j]], Home.Team == as.character(teams[i])))
+    data[[i]] = rbind(data[[i]], temp)
+  }
+}
+
+for (i in 1:length(data)){
+  data[[i]] = data[[i]][-1,]
+}
+```
+```{r}
+rawdata = list(cfb2009,cfb2010,cfb2011,cfb2012,cfb2013)
+data = list(1,2,3,4,5)
+names(data) = teams
+for (i in 1:length(teams)) {
+  for (j in 1:length(rawdata)){
+    temp = subset(rawdata[[j]], Visitor == as.character(teams[i]) | Home.Team == as.character(teams[i]))
+    data[[i]] = rbind(data[[i]], temp)
+  }
+}
+
+for (i in 1:length(data)){
+  data[[i]] = data[[i]][-1,]
+}
+```
+
+
+
+```{r}
+for (i in 1:length(data)){
+  data[[i]]$Consecutive.Win = 0
+  data[[i]]$This.Win = 0
+  data[[i]]$Next.Win = 0
+}
+
+```
+
+**Making Consecutive Wins**
+```{r}
+for (i in 1:length(data)){
+  for (j in 1:nrow(data[[i]])){
+    if (data[[i]]$Visitor[j] == teams[i]){
+      if (data[[i]]$Visitor.Score[j] > data[[i]]$Home.Score[j]){
+        if (j == 1){
+          data[[i]]$Consecutive.Win[j] = 1
+        } else {
+          data[[i]]$Consecutive.Win[j] = data[[i]]$Consecutive.Win[j-1] + 1
+        }
+      } else {
+            data[[i]]$Consecutive.Win[j] = 0
+        } 
+    } else {
+        if (data[[i]]$Visitor.Score[j] < data[[i]]$Home.Score[j]){
+          if (j == 1){
+            data[[i]]$Consecutive.Win[j] = 1
+        } else {
+            data[[i]]$Consecutive.Win[j] = data[[i]]$Consecutive.Win[j-1] + 1
+        }
+      } else {
+          data[[i]]$Consecutive.Win[j] = 0
+        }
+      }
+    }
+}
+```
+
+
+```{r}
+for (i in 1:length(data)){
+  for (j in 2:nrow(data[[i]])){
+    if (data[[i]]$Visitor[j] == as.character(teams[i])){
+      if (data[[i]]$Visitor.Score[j] > data[[i]]$Home.Score[j]){
+        data[[i]]$This.Win[j] = 1
+        data[[i]]$Next.Win[j-1] = 1
+      }
+    } else {
+        if (data[[i]]$Visitor.Score[j] < data[[i]]$Home.Score[j]){
+          data[[i]]$Next.Win[j-1] = 1
+          data[[i]]$This.Win[j] = 1
+      }
+    }
+  }
+}
+
+for (i in 1:length(data)){
+  for (j in 1:nrow(data[[i]])){
+    data[[i]]$This.Win = factor(data[[i]]$This.Win)
+    data[[i]]$Next.Win = factor(data[[i]]$Next.Win)
+  }
+}
+```
+
+Naive Bayes model to predict the classification of Next.Win
+```{r}
+set.seed(1003)
+error = 1:5
+for (i in 1:length(data)){
+  sample = sample(nrow(data[[i]]), floor(nrow(data[[i]])*.75))
+  train = data[[i]][samp1,]
+  test = data[[i]][-samp1,]
+  mod = naiveBayes(Next.Win ~ factor(Consecutive.Win), data = train)
+  error[i] = 1-length(which(test$Next.Win == predict(mod, test)))/nrow(test)
+}
+
+#error rate for the Naive Bayes Model, using the first teams data
+mean(error)
+```
+Mean error for bayes throughout the 5 schools is .4375.
+
+Plotting consecutive wins against whether the team wins the next day
+```{r}
+for (i in 1:length(data)){
+  plot(Next.Win ~ factor(Consecutive.Win), data = data[[i]], main = teams[i], xlab = "Number of Consecutive Wins", ylab = "Probability of Winning Next Game")
+}
+```
+
+
+```{r}
+alldata = rbind(data[[1]], data[[2]], data[[3]], data[[4]], data[[5]])
+write.csv(alldata, "~/Downloads/alldata.csv")
+```
+
